@@ -1,0 +1,9 @@
+version: '3'
+services:
+  speedtest_exporter:
+    build: .
+    tty: true
+    volumes:
+      - .:/go/src/app
+    ports:
+      - "9300:9300"
