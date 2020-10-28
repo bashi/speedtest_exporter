@@ -1,9 +1,6 @@
 package main
 
-import (
-	"encoding/json"
-	"testing"
-)
+import "testing"
 
 func TestParseSpeedTestResult(t *testing.T) {
 	b := []byte(`
@@ -86,9 +83,23 @@ func TestParseSpeedTestResult(t *testing.T) {
 		}{Id: "b3d6bd12-1ef1-455d-9fc0-157f49d69e14", Url: "https://www.speedtest.net/result/c/b3d6bd12-1ef1-455d-9fc0-157f49d69e14"},
 	}
 
-	result := new(SpeedTestResult)
+	result, err := parseSpeedTestResult(b)
+	if err != nil {
+		t.Fatalf("json.Unmarshal failed, %v", err)
+	}
 
-	if err := json.Unmarshal(b, result); err != nil {
+	if *result != want {
+		t.Fatalf(`result = %#v, want = %+v`, *result, want)
+	}
+}
+
+func TestParseSpeedTestError(t *testing.T) {
+	b := []byte(`{"error":"Cannot read: Resource temporarily unavailable"}`)
+
+	want := SpeedTestErrorResult{ Error: "Cannot read: Resource temporarily unavailable"}
+
+	result, err := parseSpeedTestErrorResult(b)
+	if err != nil {
 		t.Fatalf("json.Unmarshal failed, %v", err)
 	}
 

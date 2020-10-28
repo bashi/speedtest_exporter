@@ -63,9 +63,11 @@ var (
 	})
 )
 
-func runSpeedTest() (*SpeedTestResult, error) {
+func runSpeedTest() ([]byte, error) {
 	if *useMockResponse {
-		return runMockSpeedTest()
+		out := []byte(`{"type":"result","timestamp":"2020-10-24T01:32:34Z","ping":{"jitter":0.083000000000000004,"latency":3.222},"download":{"bandwidth":53038114,"bytes":435642344,"elapsed":8312},"upload":{"bandwidth":89205892,"bytes":429968780,"elapsed":4808},"packetLoss":0,"isp":"JPNE","interface":{"internalIp":"192.168.100.11","name":"eth0","macAddr":"00:15:5D:0B:0C:15","isVpn":false,"externalIp":"106.72.179.96"},"server":{"id":14623,"name":"IPA CyberLab","location":"Bunkyo","country":"Japan","host":"speed.coe.ad.jp","port":8080,"ip":"103.95.184.74"},"result":{"id":"ee0d6f53-dbed-44d1-a231-cad85743cde3","url":"https://www.speedtest.net/result/c/ee0d6f53-dbed-44d1-a231-cad85743cde3"}}`)
+		log.Printf("%s", out)
+		return out, nil
 	}
 
 	out, err := exec.Command(*speedTestBinary, "--accept-license", "--precision=0", "--format=json", "--progress=no").Output()
@@ -74,30 +76,26 @@ func runSpeedTest() (*SpeedTestResult, error) {
 		return nil, err
 	}
 
-	result := new(SpeedTestResult)
-	if err := json.Unmarshal(out, result); err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-func runMockSpeedTest() (*SpeedTestResult, error) {
-	b := []byte(`{"type":"result","timestamp":"2020-10-24T01:32:34Z","ping":{"jitter":0.083000000000000004,"latency":3.222},"download":{"bandwidth":53038114,"bytes":435642344,"elapsed":8312},"upload":{"bandwidth":89205892,"bytes":429968780,"elapsed":4808},"packetLoss":0,"isp":"JPNE","interface":{"internalIp":"192.168.100.11","name":"eth0","macAddr":"00:15:5D:0B:0C:15","isVpn":false,"externalIp":"106.72.179.96"},"server":{"id":14623,"name":"IPA CyberLab","location":"Bunkyo","country":"Japan","host":"speed.coe.ad.jp","port":8080,"ip":"103.95.184.74"},"result":{"id":"ee0d6f53-dbed-44d1-a231-cad85743cde3","url":"https://www.speedtest.net/result/c/ee0d6f53-dbed-44d1-a231-cad85743cde3"}}`)
-	log.Printf("%s", b)
-	result := new(SpeedTestResult)
-	if err := json.Unmarshal(b, result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return out, nil
 }
 
 func recordSpeedTest() {
 	go func() {
 		for {
-			result, err := runSpeedTest()
+			out, err := runSpeedTest()
 			if err != nil {
 				log.Fatal(err)
+			}
+
+			result, err := parseSpeedTestResult(out)
+			if err != nil {
+				result, err := parseSpeedTestErrorResult(out)
+				if err != nil {
+					log.Fatal(err)
+				}
+				log.Printf("ERROR: %v", result)
+				time.Sleep(interval)
+				continue
 			}
 
 			pingJitter.Set(result.Ping.Jitter)
@@ -154,6 +152,26 @@ type SpeedTestResult struct {
 		Id  string `json:"id"`
 		Url string `json:"url"`
 	} `json:"result"`
+}
+
+func parseSpeedTestResult(b []byte) (*SpeedTestResult, error) {
+	result := new(SpeedTestResult)
+	if err := json.Unmarshal(b, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+type SpeedTestErrorResult struct {
+	Error string `json:"error"`
+}
+
+func parseSpeedTestErrorResult(b []byte) (*SpeedTestErrorResult, error) {
+	result := new(SpeedTestErrorResult)
+	if err := json.Unmarshal(b, result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func main() {
